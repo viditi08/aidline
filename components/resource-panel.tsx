@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AUDIENCE_LABEL, percent } from "@/lib/decision-labels";
 import { resourcePlainText, summaryPlainText, telHref } from "@/lib/format";
 import { VERIFICATION_LABEL, type Resource } from "@/lib/types";
 
@@ -15,6 +16,48 @@ function Badge({ resource }: { resource: Resource }) {
     <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${tone}`}>
       {VERIFICATION_LABEL[resource.verification_status]}
     </span>
+  );
+}
+
+function Chip({ tone, children }: { tone: "good" | "maybe" | "neutral"; children: React.ReactNode }) {
+  const color = tone === "good" ? "bg-moss/10 text-moss" : tone === "maybe" ? "bg-amber/10 text-amber" : "bg-ink/5 text-ink";
+  return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${color}`}>{children}</span>;
+}
+
+/** Parallel Decisions estimates for this place, shown as chips. */
+function DecisionRow({ resource }: { resource: Resource }) {
+  const decision = resource.decision;
+  if (!decision) return null;
+  const chips: React.ReactNode[] = [];
+  if (decision.open_today != null) {
+    const value = decision.open_today;
+    const label = value >= 0.7 ? "Likely" : value >= 0.4 ? "Maybe" : "Probably not";
+    chips.push(
+      <Chip key="open" tone={value >= 0.7 ? "good" : value >= 0.4 ? "maybe" : "neutral"}>
+        {label} open {decision.day} · {percent(value)}
+      </Chip>,
+    );
+  }
+  if (decision.audience) {
+    chips.push(
+      <Chip key="who" tone={decision.audience === "anyone" ? "good" : "neutral"}>
+        {AUDIENCE_LABEL[decision.audience]}
+      </Chip>,
+    );
+  }
+  if (decision.offers_food != null) {
+    chips.push(
+      <Chip key="food" tone={decision.offers_food >= 0.7 ? "good" : "maybe"}>
+        Gives free food · {percent(decision.offers_food)}
+      </Chip>,
+    );
+  }
+  if (chips.length === 0) return null;
+  return (
+    <div className="mt-3">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink/60">Parallel Decisions estimate</p>
+      <div className="mt-1.5 flex flex-wrap gap-1.5">{chips}</div>
+    </div>
   );
 }
 
@@ -80,6 +123,7 @@ export function ResourcePanel({
               <Badge resource={resource} />
             </div>
             <p className="mt-3 text-sm leading-6 text-ink/80">{resource.description}</p>
+            <DecisionRow resource={resource} />
             <div className="mt-4 space-y-1">
               <Fact label="Address" value={resource.address} />
               <Fact label="Hours" value={resource.hours} />
@@ -162,6 +206,34 @@ export function ResourcePanel({
               <dt className="font-semibold text-white">What is still uncertain</dt>
               <dd>{selected.uncertainties}</dd>
             </div>
+            {selected.decision ? (
+              <div>
+                <dt className="font-semibold text-white">Parallel Decisions estimate</dt>
+                <dd>
+                  {[
+                    selected.decision.offers_food != null ? `Gives free food: ${percent(selected.decision.offers_food)} likely.` : null,
+                    selected.decision.audience ? `Who can go: ${AUDIENCE_LABEL[selected.decision.audience]}.` : null,
+                    selected.decision.open_today != null
+                      ? `Serving food on ${selected.decision.day}: ${percent(selected.decision.open_today)} likely.`
+                      : null,
+                    "These are estimates from public sources, not a guarantee or an eligibility decision.",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  {selected.decision.citations.length ? (
+                    <ul className="mt-1 list-disc pl-5">
+                      {selected.decision.citations.map((citation) => (
+                        <li key={citation.url}>
+                          <a className="underline" href={citation.url} target="_blank" rel="noreferrer noopener">
+                            {citation.title ?? citation.url}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </dd>
+              </div>
+            ) : null}
             <div>
               <dt className="font-semibold text-white">Source</dt>
               <dd>

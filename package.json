@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "phone:setup": "node --no-warnings --env-file=.env.local --import ./scripts/ts-paths.mjs scripts/phone-setup.ts"
   },
   "dependencies": {
     "next": "^16.4.6",

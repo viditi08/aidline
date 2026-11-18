@@ -1,6 +1,18 @@
-export type Category = "food" | "utility";
-export type Urgency = "today" | "soon" | "ongoing" | "emergency";
-export type SearchFocus = "general" | "hours" | "eligibility" | "delivery" | "application";
+export type Category = "food";
+export type Urgency = "today" | "soon" | "ongoing";
+export const FOCUS_VALUES = [
+  "general",
+  "meals",
+  "restaurants",
+  "helpline",
+  "families",
+  "seniors",
+  "hours",
+  "eligibility",
+  "delivery",
+  "application",
+] as const;
+export type SearchFocus = (typeof FOCUS_VALUES)[number];
 export type VerificationStatus =
   | "verified"
   | "partially_verified"
@@ -17,6 +29,19 @@ export type AgentStatus =
   | "muted"
   | "error";
 
+export type Audience = "anyone" | "specific_group" | "application_required";
+
+/** Parallel Decisions estimates for one resource. Probabilities are 0 to 1. */
+export interface ResourceDecision {
+  offers_food: number | null;
+  audience: Audience | null;
+  audience_confidence: number | null;
+  open_today: number | null;
+  day: string;
+  citations: { url: string; title: string | null }[];
+  decision_id: string | null;
+}
+
 export interface Resource {
   id: string;
   name: string;
@@ -31,6 +56,7 @@ export interface Resource {
   source_url: string;
   verification_status: VerificationStatus;
   uncertainties: string;
+  decision?: ResourceDecision | null;
 }
 
 export interface SearchInput {
@@ -38,7 +64,6 @@ export interface SearchInput {
   zip_code: string;
   urgency?: Urgency | null;
   household_size?: number | null;
-  utility_provider?: string | null;
   focus?: SearchFocus;
 }
 
@@ -57,7 +82,6 @@ export interface SessionContext {
   category: Category | null;
   zip: string | null;
   urgency: Urgency | null;
-  utilityProvider: string | null;
   householdSize: number | null;
   focus: SearchFocus;
   resources: Resource[];
@@ -74,7 +98,6 @@ export function emptyContext(): SessionContext {
     category: null,
     zip: null,
     urgency: null,
-    utilityProvider: null,
     householdSize: null,
     focus: "general",
     resources: [],

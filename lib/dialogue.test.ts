@@ -38,20 +38,6 @@ describe("AidLine conversation", () => {
     expect(next.searchInput?.urgency).toBe("ongoing");
   });
 
-  it("treats a looming shutoff as urgent utility help and asks who the provider is", () => {
-    const turn = say(emptyContext(), "My electricity might get cut off tomorrow.");
-    expect(turn.context.category).toBe("utility");
-    expect(turn.context.urgency).toBe("emergency");
-    expect(turn.shouldSearch).toBe(false);
-    expect(turn.reply).toMatch(/utility|company|bill/i);
-    const provider = say(turn.context, "PG&E");
-    expect(provider.context.utilityProvider).toBe("PG&E");
-    expect(provider.reply).toMatch(/ZIP code/i);
-    const zip = say(provider.context, "94103");
-    expect(zip.shouldSearch).toBe(true);
-    expect(zip.searchInput).toMatchObject({ category: "utility", zip_code: "94103", urgency: "emergency" });
-  });
-
   it("looks up eligibility without deciding that someone qualifies", () => {
     const turn = say(emptyContext(), "I don't know if I qualify for food assistance.");
     expect(turn.context.focus).toBe("eligibility");
@@ -109,10 +95,45 @@ describe("AidLine conversation", () => {
     expect(turn.context.zip).toBeNull();
   });
 
-  it("accepts an unknown utility provider and still collects the ZIP code", () => {
-    const first = say(emptyContext(), "My power might be shut off tomorrow.");
-    const second = say(first.context, "I don't know");
-    expect(second.context.utilityProvider).toBe("unknown");
-    expect(second.reply).toMatch(/ZIP code/i);
+  it("treats someone who can't afford food as a food request", () => {
+    const turn = say(emptyContext(), "I can't afford to eat this week");
+    expect(turn.context.category).toBe("food");
+    expect(turn.reply).toMatch(/ZIP code/i);
+  });
+
+  it("finds free meals without asking about urgency", () => {
+    const turn = say(emptyContext(), "Where can I get a free meal? I'm in 94102");
+    expect(turn.shouldSearch).toBe(true);
+    expect(turn.searchInput).toMatchObject({ category: "food", zip_code: "94102", focus: "meals" });
+  });
+
+  it("gives 211 right away when someone asks who to call", () => {
+    const turn = say(emptyContext(), "Is there a number I can call for food help?");
+    expect(turn.context.focus).toBe("helpline");
+    expect(turn.reply).toMatch(/2-1-1/);
+  });
+
+  it("understands restaurants that take EBT", () => {
+    const turn = say(emptyContext(), "Are there restaurants that take EBT near 94110?");
+    expect(turn.searchInput).toMatchObject({ category: "food", focus: "restaurants" });
+  });
+
+  it("routes older adults to senior meal programs", () => {
+    const turn = say(emptyContext(), "I'm a senior and need meals, 94112");
+    expect(turn.searchInput?.focus).toBe("seniors");
+  });
+
+  it("explains that AidLine only covers food when asked about a bill", () => {
+    const turn = say(emptyContext(), "My electricity might get cut off tomorrow.");
+    expect(turn.shouldSearch).toBe(false);
+    expect(turn.reply).toMatch(/only helps? with food/i);
+    expect(turn.reply).toMatch(/2-1-1/);
+  });
+
+  it("still helps with food when a bill is mentioned alongside it", () => {
+    const turn = say(emptyContext(), "After paying the electric bill I can't afford food");
+    expect(turn.context.category).toBe("food");
+    expect(turn.reply).toMatch(/ZIP code/i);
   });
 });
+

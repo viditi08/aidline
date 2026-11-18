@@ -14,7 +14,7 @@ import {
   type TranscriptLine,
 } from "@/lib/types";
 
-const PROMPTS = ["I need food assistance.", "I need help paying my electricity bill."];
+const PROMPTS = ["I can't afford food right now.", "Where can I get a free meal today?", "Who can I call for food help?"];
 
 const STATUS_LABEL: Record<AgentStatus, string> = {
   idle: "Ready",
@@ -163,6 +163,8 @@ export function AidLineApp() {
     try {
       await session.start();
     } catch (error) {
+      await session.end();
+      if (voiceRef.current === session) voiceRef.current = null;
       setMode("type");
       setStatus("error");
       setNotice(error instanceof Error ? error.message : "Microphone or voice startup failed. You can type instead.");
@@ -214,10 +216,9 @@ export function AidLineApp() {
   }
 
   const sessionBits = [
-    context.category === "food" ? "Food" : context.category === "utility" ? "Utility" : null,
+    context.category === "food" ? "Food" : null,
     context.zip,
     context.urgency,
-    context.utilityProvider && context.utilityProvider !== "unknown" ? context.utilityProvider : null,
   ].filter(Boolean);
 
   return (
@@ -232,9 +233,9 @@ export function AidLineApp() {
 
       {phase === "welcome" ? (
         <section className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center py-12 text-center">
-          <p className="rounded-full bg-teal/10 px-3 py-1 text-sm font-semibold text-teal-deep">Food and utility help, by voice</p>
+          <p className="rounded-full bg-teal/10 px-3 py-1 text-sm font-semibold text-teal-deep">Free food help, by voice</p>
           <h1 className="mt-6 font-display text-6xl leading-none text-ink sm:text-7xl">Need help? Just ask.</h1>
-          <p className="mt-4 max-w-xl text-lg leading-8 text-ink/80">Find food and utility assistance in San Francisco.</p>
+          <p className="mt-4 max-w-xl text-lg leading-8 text-ink/80">Find free meals, groceries, and food help lines in San Francisco.</p>
           <button
             type="button"
             className="mt-10 grid h-28 w-28 place-items-center rounded-full bg-teal text-white shadow-[0_16px_40px_rgba(12,92,86,0.28)] disabled:opacity-50"
@@ -252,7 +253,7 @@ export function AidLineApp() {
           >
             Start Conversation
           </button>
-          <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+          <div className="mt-6 flex flex-col flex-wrap justify-center gap-2 sm:flex-row">
             {PROMPTS.map((prompt) => (
               <button
                 key={prompt}
@@ -264,21 +265,7 @@ export function AidLineApp() {
               </button>
             ))}
           </div>
-          <button type="button" className="mt-4 text-sm font-semibold text-teal underline decoration-teal/30" onClick={() => begin("type")}>
-            Type instead
-          </button>
           {notice ? <p className="mt-4 text-sm text-clay">{notice}</p> : null}
-          <div className="mt-10 max-w-xl space-y-2 text-sm leading-6 text-ink/70">
-            <p>
-              AidLine does not create an account or save this conversation. Voice audio is processed by AssemblyAI. Search questions are sent to Parallel. We ask for a ZIP code, not your full address, Social Security number, or payment details.
-            </p>
-            {capabilities && (!capabilities.voice || !capabilities.search) ? (
-              <p className="text-ink">
-                {!capabilities.voice ? "Voice is off until ASSEMBLYAI_API_KEY is in .env.local. " : ""}
-                {!capabilities.search ? "Live search is off until PARALLEL_API_KEY is in .env.local. Official starting pages will be shown instead." : ""}
-              </p>
-            ) : null}
-          </div>
         </section>
       ) : (
         <section className="mt-6 grid flex-1 gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">

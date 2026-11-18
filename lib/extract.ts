@@ -37,6 +37,12 @@ export function extractAddress(text: string): string | null {
   return address.length <= 140 ? address : null;
 }
 
+/** Pages that list several street addresses are directories, not one place. */
+export function addressCount(text: string): number {
+  const flags = ADDRESS.flags.includes("g") ? ADDRESS.flags : `${ADDRESS.flags}g`;
+  return text.match(new RegExp(ADDRESS.source, flags))?.length ?? 0;
+}
+
 export function extractEligibility(text: string): string | null {
   return matchingSentence(text, /\b(eligib|qualif|income (at|below|under|limit)|household income)\b/i);
 }

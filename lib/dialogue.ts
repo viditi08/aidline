@@ -8,8 +8,9 @@ export interface TurnPlan {
   searchInput: SearchInput | null;
 }
 
-const FOOD = /\b(food|hungry|grocer\w*|pantry|pantries|meal|meals|calfresh|snap|eat|eaten)\b/i;
-const UTILITY = /\b(electric\w*|utility|utilities|pge|pg\s*&?\s*e|power|gas bill|shut\s?off|disconnect\w*|lights)\b/i;
+const FOOD =
+  /\b(food|hungry|starving|grocer\w*|pantry|pantries|meal|meals|calfresh|snap|ebt|wic|eat|eaten|lunch|dinner|breakfast|restaurants?|soup kitchen|helpline|hotline)\b|can'?t afford (to eat|food|groceries)|nothing to eat|no food/i;
+const OTHER_NEEDS = /\b(electric\w*|utility|utilities|pg\s*&?\s*e|power bill|gas bill|water bill|bills?|rent|evict\w*|shut\s?off|disconnect\w*|cut off)\b/i;
 const SENSITIVE =
   /\b\d{3}-\d{2}-\d{4}\b|\bsocial security\b|\bssn\b|\bcredit card\b|\bcard number\b|\bcvv\b|\bbank account\b|\brouting number\b/i;
 
@@ -31,19 +32,11 @@ function quantity(value: string): number | null {
 }
 
 function detectCategory(text: string): Category | null {
-  const food = FOOD.test(text);
-  const utility = UTILITY.test(text);
-  if (food && utility) {
-    return /disconnect|shut\s?off|cut off|electric/i.test(text) ? "utility" : "food";
-  }
-  if (utility) return "utility";
-  if (food) return "food";
-  return null;
+  return FOOD.test(text) ? "food" : null;
 }
 
-function detectUrgency(text: string, category: Category | null): Urgency | null {
+function detectUrgency(text: string): Urgency | null {
   if (/open today|hours|are these|are they open/i.test(text)) return null;
-  if (category === "utility" && /\b(disconnect\w*|shut\s?off|cut off|tomorrow)\b/i.test(text)) return "emergency";
   if (/\b(today|right now|tonight|this morning|haven'?t eaten)\b/i.test(text)) return "today";
   if (/\b(this week|few days|next few days|couple of days)\b/i.test(text)) return "soon";
   if (/\b(ongoing|monthly|calfresh|snap|grocery assistance|groceries)\b/i.test(text)) return "ongoing";
@@ -51,19 +44,15 @@ function detectUrgency(text: string, category: Category | null): Urgency | null 
 }
 
 function detectFocus(text: string): SearchFocus | null {
+  if (/help ?line|hot ?line|phone number|number (to|i can) call|who (can|do|should) i call|someone to (talk|call)|call someone/i.test(text)) return "helpline";
+  if (/restaurants?|eat out|buy (a )?(hot )?meal|hot food with|use (my )?(ebt|calfresh) (for|at|to buy) (a )?(meal|food at)/i.test(text)) return "restaurants";
   if (/can'?t get there|delivery|deliver|ride|transport|without (going|a car)|come to me/i.test(text)) return "delivery";
   if (/qualif|eligib|do i qualify|am i eligible/i.test(text)) return "eligibility";
   if (/open today|what time|\bhours\b|are they open|are these/i.test(text)) return "hours";
   if (/how do i apply|application|sign up|enroll/i.test(text)) return "application";
-  return null;
-}
-
-function detectProvider(text: string, category: Category | null): string | null {
-  if (/pg\s*&?\s*e|pacific gas/i.test(text)) return "PG&E";
-  if (/clean\s*power/i.test(text)) return "CleanPowerSF";
-  if (category === "utility" && /\b(don'?t know|do not know|not sure|no idea|unsure)\b/i.test(text) && !/qualif|eligib/i.test(text)) {
-    return "unknown";
-  }
+  if (/\b(senior|seniors|older adult|elderly|over 6\d|disabilit\w*|disabled)\b/i.test(text)) return "seniors";
+  if (/\b(wic|pregnant|baby|babies|infant|toddler|formula|school (meals?|lunch|breakfast))\b/i.test(text)) return "families";
+  if (/free (hot )?meals?|hot meals?|soup kitchen|somewhere to eat|place to eat|something to eat|eat (today|tonight|now)|a meal/i.test(text)) return "meals";
   return null;
 }
 
@@ -94,13 +83,19 @@ function ready(context: SessionContext, reply: string): TurnPlan {
       zip_code: context.zip as string,
       urgency: context.urgency,
       household_size: context.householdSize,
-      utility_provider: context.utilityProvider,
       focus: context.focus,
     },
   };
 }
 
 function foodAck(context: SessionContext): string {
+  if (context.focus === "helpline") return "I'll pull up food help numbers you can call.";
+  if (context.focus === "meals") return `I'll look for free meals near ${context.zip}.`;
+  if (context.focus === "restaurants") {
+    return "I'll look up the CalFresh Restaurant Meals Program, which lets some people buy hot meals at restaurants with EBT.";
+  }
+  if (context.focus === "families") return "I'll look for food help for families with kids, like WIC and school meals.";
+  if (context.focus === "seniors") return "I'll look for free meals and grocery help for older adults and people with disabilities.";
   if (context.focus === "eligibility") {
     return "I can't decide whether you qualify. I'll look up what the official pages say about eligibility.";
   }
@@ -110,14 +105,6 @@ function foodAck(context: SessionContext): string {
   if (context.urgency === "today") return "I'll search for options that may be able to help today.";
   if (context.urgency === "ongoing") return `I'll search for grocery and food assistance around ${context.zip}.`;
   return `I'll search for food assistance around ${context.zip}.`;
-}
-
-function utilityAck(context: SessionContext): string {
-  if (context.urgency === "emergency" || context.urgency === "today") {
-    return "Since a disconnection may be soon, contacting your utility is the first priority. I'll also look for assistance programs.";
-  }
-  if (context.focus === "eligibility") return "I can't decide whether you qualify. I'll look up what the official pages say.";
-  return "I'll search for utility assistance programs and official contact information.";
 }
 
 export function nextTurn(context: SessionContext, raw: string): TurnPlan {
@@ -140,13 +127,14 @@ export function nextTurn(context: SessionContext, raw: string): TurnPlan {
   }
 
   const category = detectCategory(text);
+  if (!category && OTHER_NEEDS.test(text)) {
+    return ask(
+      next,
+      "AidLine only helps with food. For bills, rent, or other needs, you can dial 2-1-1. If you also need food, tell me your ZIP code.",
+    );
+  }
   if (category) next.category = category;
-  if (/pg\s*&?\s*e|pacific gas|clean\s*power/i.test(text) && !next.category) next.category = "utility";
-
-  const provider = detectProvider(text, next.category);
-  if (provider) next.utilityProvider = provider;
-
-  const urgency = detectUrgency(text, next.category);
+  const urgency = detectUrgency(text);
   if (urgency) next.urgency = urgency;
 
   const household = detectHousehold(text);
@@ -158,36 +146,36 @@ export function nextTurn(context: SessionContext, raw: string): TurnPlan {
 
   if (zip) next.zip = zip;
 
+  const foodFocus = next.focus === "meals" || next.focus === "restaurants" || next.focus === "helpline" || next.focus === "families" || next.focus === "seniors";
+  if (foodFocus) next.category = "food";
   const followUp = next.focus === "hours" || next.focus === "delivery" || next.focus === "eligibility" || next.focus === "application";
   if (followUp && next.category && next.zip) {
-    return ready(next, next.category === "utility" ? utilityAck(next) : foodAck(next));
+    return ready(next, foodAck(next));
   }
   if (followUp && (!next.category || !next.zip)) {
     if (!next.category) {
-      return ask(next, "I can look that up once I know whether you need food or utility help, and your San Francisco ZIP code. Which do you need?");
+      return ask(next, "I can look that up once I know your San Francisco ZIP code. What ZIP code are you in?");
     }
     return ask(next, "What San Francisco ZIP code should I use?");
   }
 
   if (!next.category) {
-    return ask(next, "I can help with food assistance or a utility bill in San Francisco. Which one do you need?");
-  }
-
-  if (next.category === "utility") {
-    if (!next.utilityProvider) {
-      const urgent = next.urgency === "emergency" || next.urgency === "today";
+    if (/^\s*(hi|hello|hey|yo|good (morning|afternoon|evening))\b[\s!.,]*$/i.test(text)) {
       return ask(
         next,
-        urgent
-          ? "Since a disconnection may be soon, contact your utility first. Which company sends the bill? If you're not sure, say so."
-          : "Which utility company sends the bill? If you're not sure, say so.",
+        "Hi. I can help you find free meals, groceries, and food help lines in San Francisco. What ZIP code are you in?",
       );
     }
-    if (!next.zip) return ask(next, "What ZIP code are you in?");
-    return ready(next, utilityAck(next));
+    next.category = "food";
   }
 
-  if (!next.zip) return ask(next, "I can help you find food assistance. What ZIP code are you in?");
+  if (!next.zip) {
+    if (next.focus === "helpline") {
+      return ask(next, "You can dial 2-1-1 any time for food help. What ZIP code are you in, so I can also find places near you?");
+    }
+    return ask(next, "I can help you find free food. What ZIP code are you in?");
+  }
+  if (foodFocus) return ready(next, foodAck(next));
   if (!next.urgency && next.focus === "general") {
     return ask(next, "Is this something you need today, or are you looking for ongoing grocery assistance?");
   }

@@ -1,24 +1,25 @@
-import type { SearchFocus } from "@/lib/types";
+import { FOCUS_VALUES, type SearchFocus } from "@/lib/types";
 
 export const AGENT_GREETING =
-  "Hi, I'm AidLine. I can help you find food or utility assistance in San Francisco. What's going on?";
+  "Hi, I'm AidLine. I can help you find free meals, groceries, and food help lines in San Francisco. What's going on?";
 
 export const SYSTEM_PROMPT = `You are AidLine, a voice-first assistance navigator serving San Francisco, California.
 
-Your purpose is to help users discover food assistance and emergency utility-bill assistance.
+Your purpose is to help people who cannot afford food find it: free meals they can get today, free groceries and pantries, phone numbers they can call for food help, restaurants that take CalFresh EBT through the Restaurant Meals Program, CalFresh itself, WIC and school meals for families, and meals for older adults and people with disabilities.
+AidLine only helps with food. If someone asks about bills, rent, or other needs, say kindly that AidLine only covers food and that they can dial 2-1-1 for other help.
+If someone asks who they can call, tell them right away they can dial 2-1-1 for food help, then search with focus helpline.
 
 Speak naturally, clearly, and concisely. One or two short sentences, then wait.
 
 Determine the user's need and ask only for essential missing information, one question at a time.
-For food help, ask for a San Francisco ZIP code, then whether they need food today or ongoing grocery assistance, unless they already said.
-For a utility bill, ask which company sends the bill, then the ZIP code, unless they already said.
+For food help, ask for a San Francisco ZIP code. Ask whether they need food today or ongoing grocery help only if it is not already clear from what they asked.
 Remember the ZIP code, category, and urgency already given in this conversation. Do not ask again.
 
 Use the search_assistance tool whenever the user needs current programs, hours, eligibility, phone numbers, addresses, delivery options, or what to do next.
 Do this as soon as you have the category and a San Francisco ZIP code.
 Say you are looking before the tool returns. Do not invent an answer while you wait.
 
-Prioritize official government, utility, and nonprofit sources.
+Prioritize official government and nonprofit sources.
 
 Never invent program names, hours, funding, availability, addresses, phone numbers, or eligibility decisions.
 If a field in the tool result is null, say it was not listed and that the user should confirm it.
@@ -27,12 +28,13 @@ You may mention a phone number, hour, or address only when that exact value is p
 Do not promise that a person qualifies for assistance.
 Do not claim you contacted a provider or submitted an application.
 
-If the situation is urgent, especially a possible utility disconnection, the first priority is contacting the utility provider directly. Then share programs the search returned.
+If someone has not eaten or needs food today, put free meals and places open today first, and remind them they can dial 2-1-1.
 
 Never request Social Security numbers, passwords, bank account details, or payment card information.
 If the user starts to share those, stop them and continue without that information.
 
 If search fails or information cannot be verified, say so.
+Be warm and never make the person feel judged for needing help.
 Keep responses calm, practical, and short.
 You only cover San Francisco. If the ZIP code is outside the city, say so.`;
 
@@ -40,7 +42,7 @@ export const SEARCH_TOOL = {
   type: "function" as const,
   name: "search_assistance",
   description:
-    "Search current official and nonprofit sources for food or utility assistance in San Francisco. Call this for programs, hours, eligibility, phone numbers, addresses, delivery, applications, or next steps. Do not guess those facts yourself. Requires category and a San Francisco ZIP code.",
+    "Search current official and nonprofit sources for free food help in San Francisco. Call this for programs, hours, eligibility, phone numbers, addresses, delivery, applications, or next steps. Do not guess those facts yourself. Requires category and a San Francisco ZIP code.",
   execution_mode: "interactive" as const,
   timeout_seconds: 45,
   parameters: {
@@ -48,8 +50,8 @@ export const SEARCH_TOOL = {
     properties: {
       category: {
         type: "string",
-        enum: ["food", "utility"],
-        description: "food for groceries, pantries, or CalFresh. utility for an electric or gas bill, shutoff, or payment help.",
+        enum: ["food"],
+        description: "Always food.",
       },
       zip_code: {
         type: "string",
@@ -57,23 +59,19 @@ export const SEARCH_TOOL = {
       },
       urgency: {
         type: "string",
-        enum: ["today", "soon", "ongoing", "emergency"],
+        enum: ["today", "soon", "ongoing"],
         description:
-          "today means they need food now. soon means this week. ongoing means monthly or CalFresh. emergency means a utility shutoff is imminent.",
+          "today means they need food now. soon means this week. ongoing means monthly or CalFresh.",
       },
       household_size: {
         type: "number",
         description: "Only if the user stated a household or family size. Do not guess.",
       },
-      utility_provider: {
-        type: "string",
-        description: "Utility company the user named, such as PG&E. Use unknown if they are not sure.",
-      },
       focus: {
         type: "string",
-        enum: ["general", "hours", "eligibility", "delivery", "application"] satisfies SearchFocus[],
+        enum: [...FOCUS_VALUES] satisfies SearchFocus[],
         description:
-          "general for a first lookup. hours if they ask what is open. eligibility if they ask whether they qualify. delivery if they cannot get there. application if they ask how to apply.",
+          "general for a first food lookup (pantries and free food). meals for a free hot meal or somewhere to eat. restaurants for restaurants that take CalFresh EBT. helpline for phone numbers to call. families for WIC, babies, or school meals. seniors for older adults or people with disabilities. hours if they ask what is open. eligibility if they ask whether they qualify. delivery if they cannot get there. application if they ask how to apply.",
       },
     },
     required: ["category", "zip_code"],
@@ -91,12 +89,15 @@ export function voiceSessionConfig(seeded: boolean) {
         "AidLine",
         "San Francisco",
         "CalFresh",
-        "PG&E",
-        "LIHEAP",
         "food bank",
+        "free meals",
+        "WIC",
+        "EBT",
+        "Restaurant Meals Program",
+        "GLIDE",
+        "St. Anthony's",
+        "2-1-1",
         "food pantry",
-        "utility",
-        "disconnection",
         "94103",
         "94110",
         "94102",

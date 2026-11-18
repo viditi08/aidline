@@ -1,6 +1,6 @@
 # AidLine
 
-Voice-first help finding food and utility assistance in San Francisco.
+Voice-first help for people in San Francisco who can't afford food: free meals, free groceries, food help lines, restaurants that take CalFresh EBT, CalFresh, WIC, and meals for older adults. It only covers food.
 
 ## Local environment
 
@@ -15,23 +15,30 @@ Open [http://localhost:3000](http://localhost:3000).
 Keys live in `.env.local` (already created, left blank):
 
 - `ASSEMBLYAI_API_KEY` enables the microphone and spoken replies.
-- `PARALLEL_API_KEY` enables live web search.
+- `PARALLEL_API_KEY` is optional. Without it, AidLine uses Parallel's free, rate-limited search. Add a key for higher limits. Set `PARALLEL_FREE_SEARCH=off` to use only the built-in official links.
 
-Restart the dev server after you add or change keys. Without a search key, AidLine still runs and shows official starting pages marked as unconfirmed. Without a voice key, use Type instead.
+## How results are checked
 
-## Call or text AidLine (Twilio)
+1. **Parallel Search** finds official San Francisco food pages.
+2. **Parallel Decisions** then checks each place with typed questions: how likely it gives free food (places under 25% are dropped), who can go (anyone, a specific group, or apply first), and, when someone needs food today, how likely it is serving food today. Results likely open today are listed first.
 
-People can ask for help by phone call or SMS. Both use the same dialogue and Parallel search as the web app.
+Cards show these as estimates with their sources. They are never eligibility decisions. With a key, AidLine calls `POST /v1/decisions`; without one, it uses the same engine through Parallel's free `web_decisions` tool. Set `PARALLEL_DECISIONS=off` to skip this step.
 
-1. Add `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_PHONE_NUMBER` to `.env.local`.
-2. Expose the dev server publicly, for example `ngrok http 3000`, and set `TWILIO_WEBHOOK_BASE_URL` to that `https://…` URL. Restart `npm run dev`.
-3. In the Twilio console, open your number and set:
-   - **A call comes in** → Webhook, `POST`, `https://<public-url>/api/twilio/voice`
-   - **A message comes in** → Webhook, `POST`, `https://<public-url>/api/twilio/sms`
+## Call AidLine by phone (Twilio + AssemblyAI)
 
-Callers speak; Twilio transcribes and AidLine answers aloud. After results, a caller can say "text me" to get the options by SMS on the number they called from. Texters can reply `RESET` to start over. Every webhook is checked against Twilio's signature; for local curl testing only, `TWILIO_SKIP_SIGNATURE=1` turns that off outside production.
+```
+Caller → Twilio number → SIP trunk → AssemblyAI Voice Agent → POST /api/phone-tool → Parallel Search + Decisions
+```
 
-Call and text context is kept in memory for 30 minutes per call or number (numbers are hashed, nothing is written to disk). On multi-instance hosts, move it to a shared store such as Redis.
+AssemblyAI answers the call, listens, and speaks. When it needs places, it calls AidLine's `search_assistance` tool over HTTPS, and AidLine runs the same Search and Decisions as the website.
+
+1. In `.env.local`, set `PHONE_TOOL_SECRET` (a long random string), `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER` (like `+14155550123`), and `PUBLIC_BASE_URL` (your public HTTPS address, for example a `cloudflared tunnel --url http://localhost:3000` URL).
+2. Restart `npm run dev`, then run `npm run phone:setup`. It checks the tool is reachable, creates or updates the AssemblyAI agent, creates a Twilio SIP trunk pointed at AssemblyAI, attaches your number, and connects the number to the agent. It is safe to re-run.
+3. If the public address changes, update `PUBLIC_BASE_URL` and run `npm run phone:setup -- --agent`.
+
+The agent and trunk IDs are saved in `.aidline-phone.json` (gitignored).
+
+Restart the dev server after you add or change keys. If search is unavailable, AidLine shows official starting pages and food help numbers (211, SF-Marin Food Bank, CalFresh), each copied from its official page. Without a voice key, or if the microphone is blocked, AidLine switches to a text box automatically.
 
 ```bash
 npm test

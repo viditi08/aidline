@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "AidLine",
-  description: "Find food and utility assistance in San Francisco by asking.",
+  description: "Find free meals, groceries, and food help lines in San Francisco by asking.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

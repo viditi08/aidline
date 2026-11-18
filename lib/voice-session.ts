@@ -1,4 +1,4 @@
-import type { AgentStatus, SearchResponse, SessionContext } from "@/lib/types";
+import { FOCUS_VALUES, type AgentStatus, type SearchFocus, type SearchResponse, type SessionContext } from "@/lib/types";
 
 type ServerEvent = {
   type: string;
@@ -109,6 +109,14 @@ export class VoiceSession {
 
   async start() {
     this.handlers.onStatus("connecting");
+    // Ask for the microphone first, while we still have the click that started this,
+    // so a denial is reported here instead of crashing inside a socket handler.
+    try {
+      await this.startMicrophone();
+    } catch (error) {
+      await this.end();
+      throw new Error(microphoneErrorText(error));
+    }
     const tokenResponse = await fetch("/api/voice-token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -163,7 +171,6 @@ export class VoiceSession {
     const message = JSON.parse(raw) as ServerEvent;
 
     if (message.type === "session.ready") {
-      await this.startMicrophone();
       this.ready = true;
       this.handlers.onStatus(this.muted ? "muted" : "listening");
       if (this.seed) {
@@ -262,7 +269,7 @@ export class VoiceSession {
 
   private async runTool(event: ServerEvent) {
     if (event.name !== "search_assistance") {
-      return { error: `Unknown tool ${event.name}. Tell the user you can help with food or utility assistance.` };
+      return { error: `Unknown tool ${event.name}. Tell the user you can help them find free food.` };
     }
     try {
       const response = await fetch("/api/search", {
@@ -291,21 +298,14 @@ export class VoiceSession {
   private patchContext(args: Record<string, unknown> | undefined) {
     if (!args) return;
     const patch: Partial<SessionContext> = {};
-    if (args.category === "food" || args.category === "utility") patch.category = args.category;
+    if (args.category === "food") patch.category = args.category;
     if (typeof args.zip_code === "string") patch.zip = args.zip_code;
-    if (args.urgency === "today" || args.urgency === "soon" || args.urgency === "ongoing" || args.urgency === "emergency") {
+    if (args.urgency === "today" || args.urgency === "soon" || args.urgency === "ongoing") {
       patch.urgency = args.urgency;
     }
-    if (typeof args.utility_provider === "string") patch.utilityProvider = args.utility_provider;
     if (typeof args.household_size === "number") patch.householdSize = args.household_size;
-    if (
-      args.focus === "general" ||
-      args.focus === "hours" ||
-      args.focus === "eligibility" ||
-      args.focus === "delivery" ||
-      args.focus === "application"
-    ) {
-      patch.focus = args.focus;
+    if (typeof args.focus === "string" && (FOCUS_VALUES as readonly string[]).includes(args.focus)) {
+      patch.focus = args.focus as SearchFocus;
     }
     this.handlers.onContext(patch);
   }
@@ -331,4 +331,18 @@ export class VoiceSession {
     source.connect(node);
     if (this.audioContext.state === "suspended") await this.audioContext.resume();
   }
+}
+
+function microphoneErrorText(error: unknown): string {
+  const name = error instanceof DOMException ? error.name : "";
+  if (name === "NotAllowedError" || name === "SecurityError") {
+    return "Microphone access is blocked. Allow the microphone for this site in your browser, or type instead.";
+  }
+  if (name === "NotFoundError" || name === "OverconstrainedError") {
+    return "No microphone was found. Connect one, or type instead.";
+  }
+  if (name === "NotReadableError") {
+    return "Another app is using the microphone. Close it and try again, or type instead.";
+  }
+  return "The microphone could not start. You can type instead.";
 }

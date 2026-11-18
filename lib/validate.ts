@@ -1,6 +1,7 @@
 import { isSanFranciscoZip } from "@/lib/sf";
 import {
   emptyContext,
+  FOCUS_VALUES,
   type Category,
   type Resource,
   type SearchFocus,
@@ -10,9 +11,9 @@ import {
   type VerificationStatus,
 } from "@/lib/types";
 
-const CATEGORIES = new Set<Category>(["food", "utility"]);
-const URGENCIES = new Set<Urgency>(["today", "soon", "ongoing", "emergency"]);
-const FOCUSES = new Set<SearchFocus>(["general", "hours", "eligibility", "delivery", "application"]);
+const CATEGORIES = new Set<Category>(["food"]);
+const URGENCIES = new Set<Urgency>(["today", "soon", "ongoing"]);
+const FOCUSES = new Set<SearchFocus>(FOCUS_VALUES);
 const VERIFICATION = new Set<VerificationStatus>([
   "verified",
   "partially_verified",
@@ -30,8 +31,8 @@ export function parseSearchInput(body: unknown): SearchInput | { error: string }
   if (!record) return { error: "Search input must be an object." };
 
   const category = record.category;
-  if (category !== "food" && category !== "utility") {
-    return { error: "category must be food or utility." };
+  if (category !== "food") {
+    return { error: "category must be food." };
   }
 
   const zip = typeof record.zip_code === "string" ? record.zip_code.trim() : "";
@@ -64,9 +65,6 @@ export function parseSearchInput(body: unknown): SearchInput | { error: string }
     input.household_size = size;
   }
 
-  if (typeof record.utility_provider === "string" && record.utility_provider.trim()) {
-    input.utility_provider = record.utility_provider.trim().slice(0, 80);
-  }
 
   return input;
 }
@@ -123,8 +121,6 @@ export function sanitizeContext(value: unknown): SessionContext {
   if (typeof record.focus === "string" && FOCUSES.has(record.focus as SearchFocus)) {
     context.focus = record.focus as SearchFocus;
   }
-  const provider = clipString(record.utilityProvider, 80);
-  if (provider) context.utilityProvider = provider;
   if (typeof record.householdSize === "number" && record.householdSize >= 1 && record.householdSize <= 12) {
     context.householdSize = record.householdSize;
   }
