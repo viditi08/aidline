@@ -1,0 +1,34 @@
+[project]
+name = "assemblyai-parallel-voice-agent"
+version = "0.1.0"
+description = "Starter for LiveKit voice agents that search the live web with Parallel, using AssemblyAI for speech-to-text and text-to-speech."
+readme = "README.md"
+requires-python = ">=3.10, <3.14"
+dependencies = [
+    "livekit-agents[assemblyai,mcp,openai,silero]~=1.8",
+    "livekit-plugins-assemblyai-tts",
+    "parallel-web>=1.3",
+    "python-dotenv",
+]
+
+[dependency-groups]
+dev = ["pytest", "pytest-asyncio", "ruff"]
+
+[tool.uv.sources]
+livekit-plugins-assemblyai-tts = { git = "https://github.com/tom-aai/assemblyai-livekit-tts" }
+
+[tool.uv]
+package = false
+# Skip packages published in the last few days (also keeps safe-chain happy).
+exclude-newer = "4 days"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
